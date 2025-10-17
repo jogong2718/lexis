@@ -1,16 +1,12 @@
 import SwiftUI
 
-struct NativeLanguageView: View {
-    @AppStorage(PrefKey.nativeLanguageCode, store: PreferencesStore.defaults)
-    private var nativeLanguageCode: String = ""
-    @AppStorage(PrefKey.isLearningNewLanguage, store: PreferencesStore.defaults)
-    private var isLearningNewLanguage: Bool = true
-
-    @State private var showLearnLanguage = false
-    @State private var showDifficulty = false
+struct LearnLanguageView: View {
+    @AppStorage(PrefKey.targetLanguageCode, store: PreferencesStore.defaults)
+    private var targetLanguageCode: String = ""
 
     @State private var searchText = ""
     @State private var isDropdownExpanded = false
+    @State private var showDifficulty = false
 
     // use centralized language data
     let languages = Languages.all
@@ -30,7 +26,6 @@ struct NativeLanguageView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        // Use the parent's NavigationStack (don't create a new one)
         ZStack {
             // Background with tap to dismiss dropdown
             Color(red: 0.15, green: 0.15, blue: 0.15)
@@ -44,7 +39,7 @@ struct NativeLanguageView: View {
             VStack(spacing: 40) {
                 Spacer()
 
-                Text("What is your native\nlanguage?")
+                Text("What language\ndo you want to learn?")
                     .font(Font.custom("InriaSerif-Bold", size: 32))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
@@ -87,7 +82,7 @@ struct NativeLanguageView: View {
                                 Button {
                                     // store the language code, show english name in field
                                     searchText = lang.english
-                                    nativeLanguageCode = lang.code
+                                    targetLanguageCode = lang.code
                                     isDropdownExpanded = false
                                 } label: {
                                     HStack {
@@ -116,19 +111,14 @@ struct NativeLanguageView: View {
                 Spacer()
 
                 Button {
-                    // Save chosen native language (store code when possible).
+                    // If searchText matches a known language (english or native), store its code.
                     if let match = Languages.match(forText: searchText) {
-                        nativeLanguageCode = match.code
+                        targetLanguageCode = match.code
                     } else {
-                        nativeLanguageCode = searchText.isEmpty ? "" : searchText
+                        // fallback: store the raw input (keeps previous behavior if user typed a custom value)
+                        targetLanguageCode = searchText.isEmpty ? "" : searchText
                     }
-                    if isLearningNewLanguage {
-                        // navigate to LearnLanguageView (pushes on ancestor NavigationStack)
-                        showLearnLanguage = true
-                    } else {
-                        // TODO: implement flow when user is NOT learning a new language (e.g. finish onboarding)
-                        showDifficulty = true
-                    }
+                    showDifficulty = true
                 } label: {
                     Text("Continue")
                         .font(Font.custom("InriaSerif-Bold", size: 16))
@@ -144,11 +134,11 @@ struct NativeLanguageView: View {
         }
         .onAppear {
             // If stored value is a recognized code, show the English name; otherwise show stored text.
-            if !nativeLanguageCode.isEmpty {
-                if let lang = Languages.language(forCode: nativeLanguageCode) {
+            if !targetLanguageCode.isEmpty {
+                if let lang = Languages.language(forCode: targetLanguageCode) {
                     searchText = lang.english
                 } else {
-                    searchText = nativeLanguageCode
+                    searchText = targetLanguageCode
                 }
             }
         }
@@ -159,17 +149,12 @@ struct NativeLanguageView: View {
                     dismiss()
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "chevron.left").font(
-                            .system(size: 16, weight: .semibold))
+                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
                         Text("Back").font(Font.custom("InriaSerif-Regular", size: 16))
                     }
                     .foregroundColor(.white)
                 }
             }
-        }
-        // Push LearnLanguageView on the ancestor NavigationStack (OnboardingView)
-        .navigationDestination(isPresented: $showLearnLanguage) {
-            LearnLanguageView()
         }
         .navigationDestination(isPresented: $showDifficulty) {
             DifficultyView()
@@ -178,5 +163,5 @@ struct NativeLanguageView: View {
 }
 
 #Preview {
-    NativeLanguageView()
+    LearnLanguageView()
 }
