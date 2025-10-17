@@ -43,9 +43,11 @@ struct DifficultyView: View {
 
                         // Hard
                         HStack(spacing: 12) {
-                            Circle()
-                                .fill(Color.white.opacity(0.85))
+                            Image("L_pfp")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
                                 .frame(width: 40, height: 40)
+                                .clipShape(Circle())
                                 .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
 
                             Text("Hard")
@@ -93,9 +95,11 @@ struct DifficultyView: View {
 
                         // Medium
                         HStack(spacing: 12) {
-                            Circle()
-                                .fill(Color.white.opacity(0.85))
+                            Image("stark_pfp")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
                                 .frame(width: 40, height: 40)
+                                .clipShape(Circle())
                                 .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
 
                             Text("Medium")
@@ -143,9 +147,11 @@ struct DifficultyView: View {
 
                         // Easy
                         HStack(spacing: 12) {
-                            Circle()
-                                .fill(Color.white.opacity(0.85))
+                            Image("aqua_pfp")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
                                 .frame(width: 40, height: 40)
+                                .clipShape(Circle())
                                 .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
 
                             Text("Easy")

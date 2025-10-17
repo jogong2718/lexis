@@ -29,15 +29,15 @@ struct OnboardingView: View {
                 Color(red: 0.15, green: 0.15, blue: 0.15)
                     .ignoresSafeArea()
 
-                VStack(spacing: 40) {
+                VStack(spacing: 20) {
                     Spacer()
 
                     // Lexis Logo
                     Image("logo")
                         .resizable()
                         .aspectRatio(contentMode: .fill)
+                        .padding(.top, 20)
 
-                    Spacer()
 
                     VStack(spacing: 16) {
                         Text("Welcome to Lexis!")
