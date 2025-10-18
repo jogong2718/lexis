@@ -106,6 +106,10 @@ class VocabularyStore: ObservableObject {
         rotateWord()
     }
 
+    func getLastRotation() -> Date {
+        return vocabularyHistory.lastRotation
+    }
+
     // MARK: - Rotation Logic
 
     func checkAndRotateIfNeeded() {

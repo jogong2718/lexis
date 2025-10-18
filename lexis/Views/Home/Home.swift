@@ -16,6 +16,8 @@ struct HomeView: View {
     @StateObject private var vocabularyStore = VocabularyStore.shared
     @State private var selectedHistoryEntry: VocabularyEntry?
     @State private var showWordDetail = false
+    @State private var timeUntilNextWord: String = ""
+    @State private var timer: Timer?
 
     var body: some View {
         ZStack {
@@ -57,6 +59,9 @@ struct HomeView: View {
                     }
                 }
 
+                // Next word timer
+                nextWordTimer
+
                 Spacer()
 
                 // History section
@@ -65,6 +70,10 @@ struct HomeView: View {
         }
         .onAppear {
             vocabularyStore.checkAndRotateIfNeeded()
+            startTimer()
+        }
+        .onDisappear {
+            timer?.invalidate()
         }
         .onChange(of: isLearningNewLanguage) { oldValue, newValue in
             // Force rotation when language mode changes
@@ -247,6 +256,20 @@ struct HomeView: View {
         .padding(.horizontal, 32)
     }
 
+    // Next word timer display
+    private var nextWordTimer: some View {
+        VStack(spacing: 4) {
+            Text("Next word in")
+                .font(Font.custom("InriaSerif-Regular", size: 12))
+                .foregroundColor(.white.opacity(0.5))
+
+            Text(timeUntilNextWord)
+                .font(Font.custom("InriaSerif-Bold", size: 16))
+                .foregroundColor(.white.opacity(0.7))
+        }
+        .padding(.top, 20)
+    }
+
     // Shared history section
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -277,6 +300,66 @@ struct HomeView: View {
             }
         }
         .padding(.bottom, 50)
+    }
+
+    // Timer functions
+    private func startTimer() {
+        updateTimeUntilNextWord()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            updateTimeUntilNextWord()
+        }
+    }
+
+    private func updateTimeUntilNextWord() {
+        let lastRotation = vocabularyStore.getLastRotation()
+        let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
+        let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
+
+        // Safety check: ensure valid frequency values
+        guard frequencyMin > 0 && frequencyMax > 0 else {
+            timeUntilNextWord = "Configure settings"
+            return
+        }
+
+        let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
+
+        // Safety check: ensure avgFrequency is valid
+        guard avgFrequency > 0 && avgFrequency.isFinite else {
+            timeUntilNextWord = "Invalid frequency"
+            return
+        }
+
+        let rotationInterval = (24.0 / avgFrequency) * 3600.0  // hours to seconds
+
+        // Safety check: ensure rotationInterval is valid
+        guard rotationInterval.isFinite && rotationInterval > 0 else {
+            timeUntilNextWord = "Invalid interval"
+            return
+        }
+
+        let nextRotationDate = lastRotation.addingTimeInterval(rotationInterval)
+        let timeRemaining = nextRotationDate.timeIntervalSinceNow
+
+        if timeRemaining <= 0 {
+            timeUntilNextWord = "Soon"
+            vocabularyStore.checkAndRotateIfNeeded()
+        } else {
+            timeUntilNextWord = formatTimeInterval(timeRemaining)
+        }
+    }
+
+    private func formatTimeInterval(_ interval: TimeInterval) -> String {
+        let hours = Int(interval) / 3600
+        let minutes = (Int(interval) % 3600) / 60
+        let seconds = Int(interval) % 60
+
+        if hours > 0 {
+            return String(format: "%dh %02dm", hours, minutes)
+        } else if minutes > 0 {
+            return String(format: "%dm %02ds", minutes, seconds)
+        } else {
+            return String(format: "%ds", seconds)
+        }
     }
 }
 
