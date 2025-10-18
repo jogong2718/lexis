@@ -7,6 +7,8 @@ class VocabularyStore: ObservableObject {
 
     // Add App Group identifier
     private static let appGroupIdentifier = "group.com.jogong2718.lexis"
+    private let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier)
+
 
     @Published var currentWord: VocabularyEntry?
     @Published var history: [VocabularyEntry] = []
@@ -33,6 +35,9 @@ class VocabularyStore: ObservableObject {
 
             loadVocabulary()
             loadHistory()
+
+            reconcileFromSharedState()
+            
             checkAndRotateIfNeeded()
             observeLanguageModeChanges()
             return
@@ -43,6 +48,9 @@ class VocabularyStore: ObservableObject {
 
         loadVocabulary()
         loadHistory()
+
+        reconcileFromSharedState()
+
         checkAndRotateIfNeeded()
         observeLanguageModeChanges()
     }
@@ -113,6 +121,10 @@ class VocabularyStore: ObservableObject {
     func getTimeUntilNextRotation() -> TimeInterval? {
         let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
         let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
+        let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
+        let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
+        let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
+        let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
 
         guard frequencyMin > 0 && frequencyMax > 0 else {
             return nil
@@ -123,8 +135,66 @@ class VocabularyStore: ObservableObject {
             return nil
         }
 
-        let nextRotationDate = vocabularyHistory.lastRotation.addingTimeInterval(rotationInterval)
-        return nextRotationDate.timeIntervalSinceNow
+        let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
+        let end24 = convertTo24Hour(hour: endHour, isPM: endIsPM)
+        
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        let currentMinute = calendar.component(.minute, from: now)
+        
+        // Check if we're in the active window
+        let isInTimeWindow: Bool
+        if start24 <= end24 {
+            isInTimeWindow = currentHour >= start24 && currentHour < end24
+        } else {
+            isInTimeWindow = currentHour >= start24 || currentHour < end24
+        }
+        
+        // If outside window, calculate time until window starts
+        if !isInTimeWindow {
+            let startOfTomorrow = calendar.startOfDay(for: now.addingTimeInterval(86400))
+            let nextWindowStart: Date
+            
+            if currentHour < start24 {
+                // Window starts later today
+                var components = calendar.dateComponents([.year, .month, .day], from: now)
+                components.hour = start24
+                components.minute = 0
+                nextWindowStart = calendar.date(from: components) ?? now
+            } else {
+                // Window starts tomorrow
+                var components = calendar.dateComponents([.year, .month, .day], from: startOfTomorrow)
+                components.hour = start24
+                components.minute = 0
+                nextWindowStart = calendar.date(from: components) ?? now
+            }
+            
+            return nextWindowStart.timeIntervalSince(now)
+        }
+        
+        // We're in the window - calculate based on today's window start
+        var windowStartComponents = calendar.dateComponents([.year, .month, .day], from: now)
+        windowStartComponents.hour = start24
+        windowStartComponents.minute = 0
+        windowStartComponents.second = 0
+        
+        guard let todayWindowStart = calendar.date(from: windowStartComponents) else {
+            return nil
+        }
+        
+        // Calculate how much time has passed since window started
+        let timeSinceWindowStart = now.timeIntervalSince(todayWindowStart)
+        
+        // Calculate which rotation we're on
+        let rotationsSinceWindowStart = floor(timeSinceWindowStart / rotationInterval)
+        
+        // Calculate when the next rotation should occur
+        let nextRotationTime = todayWindowStart.addingTimeInterval((rotationsSinceWindowStart + 1) * rotationInterval)
+        
+        let timeRemaining = nextRotationTime.timeIntervalSince(now)
+        
+        return max(0, timeRemaining)
     }
 
     func calculateRotationInterval() -> TimeInterval {
@@ -134,6 +204,11 @@ class VocabularyStore: ObservableObject {
         let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
         let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
         let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
+
+        // Validate frequency values
+        guard frequencyMin > 0 && frequencyMax > 0 && frequencyMin <= frequencyMax else {
+            return 3600.0
+        }
 
         let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
         let end24 = convertTo24Hour(hour: endHour, isPM: endIsPM)
@@ -147,19 +222,23 @@ class VocabularyStore: ObservableObject {
             activeHours = Double(24 - start24 + end24)
         }
 
-        let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
-        return (activeHours / avgFrequency) * 3600.0  // hours to seconds
-    }
+        guard activeHours > 0 else {
+            return 3600.0
+        }
 
+        let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
+        
+        let interval = (activeHours * 3600.0) / avgFrequency
+        
+        return interval
+    }
     // MARK: - Rotation Logic
 
     func checkAndRotateIfNeeded() {
         let lastRotation = vocabularyHistory.lastRotation
-        let timeSinceRotation = Date().timeIntervalSince(lastRotation)
+        let now = Date()
 
         // Get user preferences
-        let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
-        let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
         let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
         let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
         let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
@@ -171,24 +250,63 @@ class VocabularyStore: ObservableObject {
 
         // Check if we're in the allowed time window
         let calendar = Calendar.current
-        let currentHour = calendar.component(.hour, from: Date())
+        let currentHour = calendar.component(.hour, from: now)
 
         let isInTimeWindow: Bool
         if start24 <= end24 {
             isInTimeWindow = currentHour >= start24 && currentHour < end24
         } else {
-            // Crosses midnight
             isInTimeWindow = currentHour >= start24 || currentHour < end24
         }
 
-        // Calculate rotation interval using active window hours instead of 24
-        let rotationInterval = calculateRotationInterval()
+        guard isInTimeWindow else {
+            print("DEBUG checkAndRotateIfNeeded: Outside time window")
+            if currentWord == nil {
+                // Show a word even outside the window on first load
+                rotateWord()
+            }
+            return
+        }
 
-        if timeSinceRotation >= rotationInterval && isInTimeWindow {
+        // Calculate today's window start
+        var windowStartComponents = calendar.dateComponents([.year, .month, .day], from: now)
+        windowStartComponents.hour = start24
+        windowStartComponents.minute = 0
+        windowStartComponents.second = 0
+        
+        guard let todayWindowStart = calendar.date(from: windowStartComponents) else {
+            return
+        }
+
+        let rotationInterval = calculateRotationInterval()
+        guard rotationInterval > 0, rotationInterval.isFinite else {
+            return
+        }
+
+        // Calculate time since today's window started
+        let timeSinceWindowStart = now.timeIntervalSince(todayWindowStart)
+        
+        // Calculate which rotation number we should be on
+        let expectedRotationNumber = Int(floor(timeSinceWindowStart / rotationInterval))
+        
+        // Calculate time since last rotation
+        let timeSinceLastRotation = now.timeIntervalSince(lastRotation)
+        
+        print("DEBUG checkAndRotateIfNeeded:")
+        print("  - Current time: \(now)")
+        print("  - Window start: \(todayWindowStart)")
+        print("  - Time since window start: \(timeSinceWindowStart)s")
+        print("  - Expected rotation #: \(expectedRotationNumber)")
+        print("  - Last rotation: \(lastRotation)")
+        print("  - Time since last rotation: \(timeSinceLastRotation)s")
+        print("  - Rotation interval: \(rotationInterval)s")
+
+        // Rotate if enough time has passed OR if this is the first word
+        if timeSinceLastRotation >= rotationInterval || currentWord == nil {
+            print("DEBUG: Rotating word now")
             rotateWord()
-        } else if currentWord == nil {
-            // First launch
-            rotateWord()
+        } else {
+            print("DEBUG: Not time to rotate yet")
         }
     }
 
@@ -233,8 +351,15 @@ class VocabularyStore: ObservableObject {
             vocabularyHistory.lastRotation = Date()
             saveHistory()
 
-            // Notify widgets to update
-            WidgetCenter.shared.reloadAllTimelines()
+            if let indexInAll = allVocabulary.firstIndex(where: { $0.id == newWord.id }) {
+                let rotationInterval = calculateRotationInterval()
+                persistRotationState(currentIndex: indexInAll, lastRotationDate: vocabularyHistory.lastRotation, rotationInterval: rotationInterval)
+            }
+
+            // Force immediate widget reload with shorter delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
         }
     }
 
@@ -256,6 +381,109 @@ class VocabularyStore: ObservableObject {
 
     func getEntry(byId id: String) -> VocabularyEntry? {
         allVocabulary.first { $0.id == id }
+    }
+
+    // MARK: - Shared State Management
+
+    private func persistRotationState(currentIndex: Int, lastRotationDate: Date, rotationInterval: TimeInterval) {
+        sharedDefaults?.set(currentIndex, forKey: "lexis.currentIndex")
+        sharedDefaults?.set(lastRotationDate, forKey: "lexis.lastRotationDate")
+        sharedDefaults?.set(rotationInterval, forKey: "lexis.rotationInterval")
+
+        let isLearningNew = PreferencesStore.defaults.bool(forKey: PrefKey.isLearningNewLanguage)
+        sharedDefaults?.set(isLearningNew, forKey: "lexis.isLearningNew")
+
+        // Export JSON-encoded minimal word list for the widget to read
+        saveSharedWordListJSON()
+
+        sharedDefaults?.synchronize()
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func saveSharedWordListJSON() {
+        struct SharedDefinition: Codable {
+            let text: String
+            let number: Int
+        }
+        struct SharedExample: Codable {
+            let original: String
+            let romanization: String?
+            let translation: String?
+        }
+        struct SharedWord: Codable {
+            let id: String
+            let word: String
+            let partOfSpeech: String
+            let pronunciation: String?
+            let languageCode: String
+            let alternateScript: String?
+            let translation: String?
+            let translationLanguageCode: String?
+            let definitions: [SharedDefinition]?
+            let exampleSentences: [SharedExample]?
+            let difficulty: String?
+        }
+
+        let sharedList: [SharedWord] = allVocabulary.map { v in
+            let defs = v.definitions?.map { SharedDefinition(text: $0.text, number: $0.number ?? 0) }
+            let examples = v.exampleSentences?.map { SharedExample(original: $0.original, romanization: $0.romanization, translation: $0.translation) }
+            let diff = String(describing: v.difficulty)
+            return SharedWord(
+                id: v.id,
+                word: v.word,
+                partOfSpeech: v.partOfSpeech,
+                pronunciation: v.pronunciation,
+                languageCode: v.languageCode,
+                alternateScript: v.alternateScript,
+                translation: v.translation,
+                translationLanguageCode: v.translationLanguageCode,
+                definitions: defs,
+                exampleSentences: examples,
+                difficulty: diff
+            )
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(sharedList) {
+            sharedDefaults?.set(data, forKey: "lexis.wordListJSON")
+        } else {
+            // fallback to simple string array if encoding fails
+            let words = allVocabulary.map { $0.word }
+            sharedDefaults?.set(words, forKey: "lexis.wordList")
+        }
+    }
+
+    // compute index for any date using base state
+    private func indexFor(date: Date = .now, baseIndex: Int, baseDate: Date, rotationInterval: TimeInterval, totalCount: Int) -> Int {
+        guard rotationInterval > 0, totalCount > 0 else { return baseIndex % max(1, totalCount) }
+        let elapsed = date.timeIntervalSince(baseDate)
+        let steps = Int(floor(elapsed / rotationInterval))
+        return (baseIndex + steps) % totalCount
+    }
+
+    // on init / app launch, read shared state and catch up
+    private func reconcileFromSharedState() {
+        // If widget/app shared state exists, advance currentWord to the appropriate index.
+        guard
+            let baseDate = sharedDefaults?.object(forKey: "lexis.lastRotationDate") as? Date,
+            let baseIndex = sharedDefaults?.object(forKey: "lexis.currentIndex") as? Int
+        else { return }
+
+        let rotationInterval = sharedDefaults?.double(forKey: "lexis.rotationInterval") ?? calculateRotationInterval()
+        guard rotationInterval > 0, !allVocabulary.isEmpty else { return }
+
+        let elapsed = Date().timeIntervalSince(baseDate)
+        let steps = Int(floor(elapsed / rotationInterval))
+        let newIndex = (baseIndex + steps) % max(1, allVocabulary.count)
+
+        // Update currentWord and history to reflect the shared index
+        let newWord = allVocabulary[newIndex]
+        currentWord = newWord
+        addToHistory(newWord)
+        // move lastRotation forward to the most recent boundary
+        vocabularyHistory.lastRotation = baseDate.addingTimeInterval(Double(steps) * rotationInterval)
+        saveHistory()
     }
 
     // MARK: - Sample Data
