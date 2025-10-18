@@ -15,6 +15,8 @@ struct DifficultyView: View {
     @AppStorage(PrefKey.frequencyMax, store: PreferencesStore.defaults) private
         var frequencyMax: Int = 4
 
+    @State private var showTimes = false
+
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -59,6 +61,8 @@ struct DifficultyView: View {
                             Button {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                                     difficultyHard.toggle()
+                                    PreferencesStore.defaults.set(
+                                        difficultyHard, forKey: PrefKey.difficultyHard)
                                 }
                             } label: {
                                 HStack(spacing: 6) {
@@ -111,6 +115,8 @@ struct DifficultyView: View {
                             Button {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                                     difficultyMedium.toggle()
+                                    PreferencesStore.defaults.set(
+                                        difficultyMedium, forKey: PrefKey.difficultyMedium)
                                 }
                             } label: {
                                 HStack(spacing: 6) {
@@ -163,6 +169,8 @@ struct DifficultyView: View {
                             Button {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                                     difficultyEasy.toggle()
+                                    PreferencesStore.defaults.set(
+                                        difficultyEasy, forKey: PrefKey.difficultyEasy)
                                 }
                             } label: {
                                 HStack(spacing: 6) {
@@ -286,7 +294,12 @@ struct DifficultyView: View {
                         difficultyMedium = true
                         difficultyEasy = true
                     }
-                    dismiss()
+                    // ensure stored values are synced to the shared defaults before navigating
+                    PreferencesStore.defaults.set(difficultyHard, forKey: PrefKey.difficultyHard)
+                    PreferencesStore.defaults.set(
+                        difficultyMedium, forKey: PrefKey.difficultyMedium)
+                    PreferencesStore.defaults.set(difficultyEasy, forKey: PrefKey.difficultyEasy)
+                    showTimes = true
                 } label: {
                     Text("Continue")
                         .font(Font.custom("InriaSerif-Bold", size: 16))
@@ -316,6 +329,9 @@ struct DifficultyView: View {
                     .foregroundColor(.white)
                 }
             }
+        }
+        .navigationDestination(isPresented: $showTimes) {
+            TimesView()
         }
     }
 }

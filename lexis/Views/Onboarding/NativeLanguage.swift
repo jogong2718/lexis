@@ -13,7 +13,7 @@ struct NativeLanguageView: View {
     @State private var isDropdownExpanded = false
 
     // use centralized language data
-    let languages = Languages.all
+    let languages = Languages.all.filter { Languages.supportedNativeLanguages.contains($0.code) }
 
     // Filter by english OR native name, return top 4 Language entries
     var filteredTop4: [Language] {

@@ -9,9 +9,20 @@ import SwiftUI
 
 @main
 struct lexisApp: App {
+    // read onboarding completion from the shared preferences store
+    @AppStorage(PrefKey.onboardingCompleted, store: PreferencesStore.defaults)
+    private var onboardingCompleted: Bool = false
+
     var body: some Scene {
         WindowGroup {
-            OnboardingView()
+            // single root NavigationStack for the whole app
+            NavigationStack {
+                if onboardingCompleted {
+                    HomeView()
+                } else {
+                    OnboardingView()
+                }
+            }
         }
     }
 }

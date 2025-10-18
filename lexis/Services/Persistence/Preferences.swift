@@ -13,6 +13,17 @@ enum PrefKey {
     // preferred numeric storage
     static let frequencyMin = "frequencyMin"
     static let frequencyMax = "frequencyMax"
+
+    // Time preferences
+    static let startHour = "startHour"
+    static let startMinute = "startMinute"
+    static let startIsPM = "startIsPM"
+    static let endHour = "endHour"
+    static let endMinute = "endMinute"
+    static let endIsPM = "endIsPM"
+
+    // Onboarding completion
+    static let onboardingCompleted = "onboardingCompleted"
 }
 
 enum PreferencesStore {

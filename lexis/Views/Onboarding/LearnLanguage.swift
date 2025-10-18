@@ -9,7 +9,7 @@ struct LearnLanguageView: View {
     @State private var showDifficulty = false
 
     // use centralized language data
-    let languages = Languages.all
+    let languages = Languages.all.filter { Languages.supportedTargetLanguages.contains($0.code) }
 
     // Filter by english OR native name, return top 4 Language entries
     var filteredTop4: [Language] {
