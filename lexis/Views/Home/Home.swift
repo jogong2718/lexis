@@ -75,10 +75,6 @@ struct HomeView: View {
         .onDisappear {
             timer?.invalidate()
         }
-        .onChange(of: isLearningNewLanguage) { oldValue, newValue in
-            // Force rotation when language mode changes
-            vocabularyStore.forceRotation()
-        }
         .navigationBarBackButtonHidden(true)
         .toolbar {
             // settings button top-left
@@ -311,34 +307,10 @@ struct HomeView: View {
     }
 
     private func updateTimeUntilNextWord() {
-        let lastRotation = vocabularyStore.getLastRotation()
-        let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
-        let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
-
-        // Safety check: ensure valid frequency values
-        guard frequencyMin > 0 && frequencyMax > 0 else {
+        guard let timeRemaining = vocabularyStore.getTimeUntilNextRotation() else {
             timeUntilNextWord = "Configure settings"
             return
         }
-
-        let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
-
-        // Safety check: ensure avgFrequency is valid
-        guard avgFrequency > 0 && avgFrequency.isFinite else {
-            timeUntilNextWord = "Invalid frequency"
-            return
-        }
-
-        let rotationInterval = (24.0 / avgFrequency) * 3600.0  // hours to seconds
-
-        // Safety check: ensure rotationInterval is valid
-        guard rotationInterval.isFinite && rotationInterval > 0 else {
-            timeUntilNextWord = "Invalid interval"
-            return
-        }
-
-        let nextRotationDate = lastRotation.addingTimeInterval(rotationInterval)
-        let timeRemaining = nextRotationDate.timeIntervalSinceNow
 
         if timeRemaining <= 0 {
             timeUntilNextWord = "Soon"

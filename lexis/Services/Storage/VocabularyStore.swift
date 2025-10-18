@@ -110,6 +110,47 @@ class VocabularyStore: ObservableObject {
         return vocabularyHistory.lastRotation
     }
 
+    func getTimeUntilNextRotation() -> TimeInterval? {
+        let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
+        let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
+
+        guard frequencyMin > 0 && frequencyMax > 0 else {
+            return nil
+        }
+
+        let rotationInterval = calculateRotationInterval()
+        guard rotationInterval > 0, rotationInterval.isFinite else {
+            return nil
+        }
+
+        let nextRotationDate = vocabularyHistory.lastRotation.addingTimeInterval(rotationInterval)
+        return nextRotationDate.timeIntervalSinceNow
+    }
+
+    func calculateRotationInterval() -> TimeInterval {
+        let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
+        let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
+        let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
+        let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
+        let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
+        let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
+
+        let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
+        let end24 = convertTo24Hour(hour: endHour, isPM: endIsPM)
+
+        // Calculate hours in the active window
+        let activeHours: Double
+        if start24 <= end24 {
+            activeHours = Double(end24 - start24)
+        } else {
+            // Crosses midnight
+            activeHours = Double(24 - start24 + end24)
+        }
+
+        let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
+        return (activeHours / avgFrequency) * 3600.0  // hours to seconds
+    }
+
     // MARK: - Rotation Logic
 
     func checkAndRotateIfNeeded() {
@@ -140,9 +181,8 @@ class VocabularyStore: ObservableObject {
             isInTimeWindow = currentHour >= start24 || currentHour < end24
         }
 
-        // Calculate rotation interval (average of min and max, in seconds)
-        let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
-        let rotationInterval = (24.0 / avgFrequency) * 3600.0  // hours to seconds
+        // Calculate rotation interval using active window hours instead of 24
+        let rotationInterval = calculateRotationInterval()
 
         if timeSinceRotation >= rotationInterval && isInTimeWindow {
             rotateWord()
