@@ -4,10 +4,38 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
+		<key>VocabularyWidgetExtension.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>1</integer>
+		</dict>
 		<key>lexis.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>5B0CCE792EA1906C00BB54DE</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>5B0CCE892EA1906E00BB54DE</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>5B0CCE932EA1906E00BB54DE</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>5BFDE3FC2EA328BA004A4172</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>

@@ -1,8 +1,12 @@
 import Combine
 import Foundation
+import WidgetKit
 
 class VocabularyStore: ObservableObject {
     static let shared = VocabularyStore()
+
+    // Add App Group identifier
+    private static let appGroupIdentifier = "group.com.jogong2718.lexis"
 
     @Published var currentWord: VocabularyEntry?
     @Published var history: [VocabularyEntry] = []
@@ -15,11 +19,27 @@ class VocabularyStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        // Setup file URLs
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[
-            0]
-        vocabularyFileURL = documentsPath.appendingPathComponent("vocabulary.json")
-        historyFileURL = documentsPath.appendingPathComponent("history.json")
+        // Setup file URLs using App Group
+        guard
+            let containerURL = FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: VocabularyStore.appGroupIdentifier
+            )
+        else {
+            // Fallback to documents directory if App Group not configured yet
+            let documentsPath = FileManager.default.urls(
+                for: .documentDirectory, in: .userDomainMask)[0]
+            vocabularyFileURL = documentsPath.appendingPathComponent("vocabulary.json")
+            historyFileURL = documentsPath.appendingPathComponent("history.json")
+
+            loadVocabulary()
+            loadHistory()
+            checkAndRotateIfNeeded()
+            observeLanguageModeChanges()
+            return
+        }
+
+        vocabularyFileURL = containerURL.appendingPathComponent("vocabulary.json")
+        historyFileURL = containerURL.appendingPathComponent("history.json")
 
         loadVocabulary()
         loadHistory()
@@ -168,6 +188,9 @@ class VocabularyStore: ObservableObject {
             addToHistory(newWord)
             vocabularyHistory.lastRotation = Date()
             saveHistory()
+
+            // Notify widgets to update
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 

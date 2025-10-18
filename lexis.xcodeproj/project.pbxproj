@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5BFDE4002EA328BA004A4172 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5BFDE3FF2EA328BA004A4172 /* WidgetKit.framework */; };
+		5BFDE4022EA328BA004A4172 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5BFDE4012EA328BA004A4172 /* SwiftUI.framework */; };
+		5BFDE4132EA328BB004A4172 /* VocabularyWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5BFDE3FD2EA328BA004A4172 /* VocabularyWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		5B0CCE8B2EA1906E00BB54DE /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +27,37 @@
 			remoteGlobalIDString = 5B0CCE792EA1906C00BB54DE;
 			remoteInfo = lexis;
 		};
+		5BFDE4112EA328BB004A4172 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5B0CCE722EA1906C00BB54DE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5BFDE3FC2EA328BA004A4172;
+			remoteInfo = VocabularyWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5BFDE4142EA328BB004A4172 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5BFDE4132EA328BB004A4172 /* VocabularyWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		5B0CCE7A2EA1906C00BB54DE /* lexis.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = lexis.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5B0CCE8A2EA1906E00BB54DE /* lexisTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = lexisTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5B0CCE942EA1906E00BB54DE /* lexisUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = lexisUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5BFDE3FD2EA328BA004A4172 /* VocabularyWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VocabularyWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5BFDE3FF2EA328BA004A4172 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		5BFDE4012EA328BA004A4172 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		5BFDE41D2EA32A48004A4172 /* VocabularyWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VocabularyWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -36,6 +67,13 @@
 				Info.plist,
 			);
 			target = 5B0CCE792EA1906C00BB54DE /* lexis */;
+		};
+		5BFDE4182EA328BB004A4172 /* Exceptions for "VocabularyWidget" folder in "VocabularyWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5BFDE3FC2EA328BA004A4172 /* VocabularyWidgetExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -56,6 +94,14 @@
 		5B0CCE972EA1906E00BB54DE /* lexisUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = lexisUITests;
+			sourceTree = "<group>";
+		};
+		5BFDE4032EA328BA004A4172 /* VocabularyWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5BFDE4182EA328BB004A4172 /* Exceptions for "VocabularyWidget" folder in "VocabularyWidgetExtension" target */,
+			);
+			path = VocabularyWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -82,15 +128,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5BFDE3FA2EA328BA004A4172 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5BFDE4022EA328BA004A4172 /* SwiftUI.framework in Frameworks */,
+				5BFDE4002EA328BA004A4172 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		5B0CCE712EA1906C00BB54DE = {
 			isa = PBXGroup;
 			children = (
+				5BFDE41D2EA32A48004A4172 /* VocabularyWidgetExtension.entitlements */,
 				5B0CCE7C2EA1906C00BB54DE /* lexis */,
 				5B0CCE8D2EA1906E00BB54DE /* lexisTests */,
 				5B0CCE972EA1906E00BB54DE /* lexisUITests */,
+				5BFDE4032EA328BA004A4172 /* VocabularyWidget */,
+				5BFDE3FE2EA328BA004A4172 /* Frameworks */,
 				5B0CCE7B2EA1906C00BB54DE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -101,8 +159,18 @@
 				5B0CCE7A2EA1906C00BB54DE /* lexis.app */,
 				5B0CCE8A2EA1906E00BB54DE /* lexisTests.xctest */,
 				5B0CCE942EA1906E00BB54DE /* lexisUITests.xctest */,
+				5BFDE3FD2EA328BA004A4172 /* VocabularyWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		5BFDE3FE2EA328BA004A4172 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5BFDE3FF2EA328BA004A4172 /* WidgetKit.framework */,
+				5BFDE4012EA328BA004A4172 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -115,10 +183,12 @@
 				5B0CCE762EA1906C00BB54DE /* Sources */,
 				5B0CCE772EA1906C00BB54DE /* Frameworks */,
 				5B0CCE782EA1906C00BB54DE /* Resources */,
+				5BFDE4142EA328BB004A4172 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5BFDE4122EA328BB004A4172 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5B0CCE7C2EA1906C00BB54DE /* lexis */,
@@ -176,6 +246,28 @@
 			productReference = 5B0CCE942EA1906E00BB54DE /* lexisUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		5BFDE3FC2EA328BA004A4172 /* VocabularyWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5BFDE4172EA328BB004A4172 /* Build configuration list for PBXNativeTarget "VocabularyWidgetExtension" */;
+			buildPhases = (
+				5BFDE3F92EA328BA004A4172 /* Sources */,
+				5BFDE3FA2EA328BA004A4172 /* Frameworks */,
+				5BFDE3FB2EA328BA004A4172 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5BFDE4032EA328BA004A4172 /* VocabularyWidget */,
+			);
+			name = VocabularyWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = VocabularyWidgetExtension;
+			productReference = 5BFDE3FD2EA328BA004A4172 /* VocabularyWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +289,9 @@
 						CreatedOnToolsVersion = 16.2;
 						TestTargetID = 5B0CCE792EA1906C00BB54DE;
 					};
+					5BFDE3FC2EA328BA004A4172 = {
+						CreatedOnToolsVersion = 16.2;
+					};
 				};
 			};
 			buildConfigurationList = 5B0CCE752EA1906C00BB54DE /* Build configuration list for PBXProject "lexis" */;
@@ -216,6 +311,7 @@
 				5B0CCE792EA1906C00BB54DE /* lexis */,
 				5B0CCE892EA1906E00BB54DE /* lexisTests */,
 				5B0CCE932EA1906E00BB54DE /* lexisUITests */,
+				5BFDE3FC2EA328BA004A4172 /* VocabularyWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -236,6 +332,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5B0CCE922EA1906E00BB54DE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5BFDE3FB2EA328BA004A4172 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -266,6 +369,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5BFDE3F92EA328BA004A4172 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -278,6 +388,11 @@
 			isa = PBXTargetDependency;
 			target = 5B0CCE792EA1906C00BB54DE /* lexis */;
 			targetProxy = 5B0CCE952EA1906E00BB54DE /* PBXContainerItemProxy */;
+		};
+		5BFDE4122EA328BB004A4172 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5BFDE3FC2EA328BA004A4172 /* VocabularyWidgetExtension */;
+			targetProxy = 5BFDE4112EA328BB004A4172 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -535,6 +650,62 @@
 			};
 			name = Release;
 		};
+		5BFDE4152EA328BB004A4172 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = VocabularyWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5WZCD9G82D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VocabularyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = VocabularyWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jogong2718.lexis.VocabularyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5BFDE4162EA328BB004A4172 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = VocabularyWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5WZCD9G82D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VocabularyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = VocabularyWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jogong2718.lexis.VocabularyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -570,6 +741,15 @@
 			buildConfigurations = (
 				5B0CCEA52EA1906E00BB54DE /* Debug */,
 				5B0CCEA62EA1906E00BB54DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5BFDE4172EA328BB004A4172 /* Build configuration list for PBXNativeTarget "VocabularyWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5BFDE4152EA328BB004A4172 /* Debug */,
+				5BFDE4162EA328BB004A4172 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

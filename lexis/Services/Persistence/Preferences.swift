@@ -29,5 +29,5 @@ enum PrefKey {
 enum PreferencesStore {
     // Use the app group UserDefaults if available, otherwise fall back to standard to avoid force-unwrap crashes.
     static let defaults: UserDefaults =
-        UserDefaults(suiteName: "group.com.anonymous.lexis") ?? .standard
+        UserDefaults(suiteName: "group.com.jogong2718.lexis") ?? .standard
 }
