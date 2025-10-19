@@ -14,10 +14,11 @@ struct HomeView: View {
     @State private var showSettings = false
 
     @StateObject private var vocabularyStore = VocabularyStore.shared
-    @State private var selectedHistoryEntry: VocabularyEntry?
+    @State private var selectedHistoryEntry: VocabularyWord?
     @State private var showWordDetail = false
     @State private var timeUntilNextWord: String = ""
     @State private var timer: Timer?
+    @State private var refreshTrigger = UUID() // Add this to force refresh
 
     var body: some View {
         ZStack {
@@ -45,6 +46,7 @@ struct HomeView: View {
                     // Learning another language view
                     if let entry = vocabularyStore.currentWord {
                         learningNewLanguageCard(entry: entry)
+                            .id(refreshTrigger) // Force refresh when trigger changes
                     } else {
                         Text("Loading...")
                             .foregroundColor(.white)
@@ -53,6 +55,7 @@ struct HomeView: View {
                     // Learning native language view
                     if let entry = vocabularyStore.currentWord {
                         nativeLanguageCard(entry: entry)
+                            .id(refreshTrigger) // Force refresh when trigger changes
                     } else {
                         Text("Loading...")
                             .foregroundColor(.white)
@@ -74,6 +77,13 @@ struct HomeView: View {
         }
         .onDisappear {
             timer?.invalidate()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("VocabularyWordChanged"))) { _ in
+            refreshTrigger = UUID()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            // Refresh when settings change
+            refreshTrigger = UUID()
         }
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -99,7 +109,7 @@ struct HomeView: View {
     }
 
     // Learning new language card
-    private func learningNewLanguageCard(entry: VocabularyEntry) -> some View {
+    private func learningNewLanguageCard(entry: VocabularyWord) -> some View {
         VStack(spacing: 16) {
             // Word with alternate script and part of speech
             VStack(spacing: 4) {
@@ -180,7 +190,7 @@ struct HomeView: View {
     }
 
     // Native language card
-    private func nativeLanguageCard(entry: VocabularyEntry) -> some View {
+    private func nativeLanguageCard(entry: VocabularyWord) -> some View {
         VStack(spacing: 16) {
             // Word with part of speech
             VStack(spacing: 4) {
@@ -276,7 +286,10 @@ struct HomeView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(vocabularyStore.history.reversed()) { entry in
+                    // Convert reversed history to an Array and iterate by index to avoid duplicate-ID warnings.
+                    let historyItems = Array(vocabularyStore.history.reversed())
+                    ForEach(historyItems.indices, id: \.self) { idx in
+                        let entry = historyItems[idx]
                         Button {
                             selectedHistoryEntry = entry
                             showWordDetail = true
@@ -311,8 +324,9 @@ struct HomeView: View {
             timeUntilNextWord = "Configure settings"
             return
         }
-
-        if timeRemaining <= 0 {
+        print("HOME: Time remaining until next word:", timeRemaining)
+        if timeRemaining < 1 {
+            print("HOME: Time for next word has arrived", timeRemaining)
             timeUntilNextWord = "Soon"
             vocabularyStore.checkAndRotateIfNeeded()
         } else {

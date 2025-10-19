@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WordDetailView: View {
-    let entry: VocabularyEntry
+    let entry: VocabularyWord
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(PrefKey.isLearningNewLanguage, store: PreferencesStore.defaults)

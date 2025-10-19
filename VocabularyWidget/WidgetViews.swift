@@ -127,15 +127,14 @@ struct LargeWidgetView: View {
                         .background(Color.blue.opacity(0.7))
                         .cornerRadius(8)
 
-                    if let difficulty = word.difficulty {
-                        Text(difficulty.rawValue)
-                            .font(.caption2)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(difficultyColor(difficulty))
-                            .cornerRadius(6)
-                    }
+                    // difficulty is non-optional on VocabularyWord; show directly
+                    Text(word.difficulty.rawValue.capitalized)
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(difficultyColor(word.difficulty))
+                        .cornerRadius(6)
                 }
             }
 
@@ -173,18 +172,24 @@ struct LargeWidgetView: View {
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
-                        Text(example.translation)
-                            .font(.caption)
-                            .italic()
-                            .lineLimit(2)
+                        if let translation = example.translation {
+                            Text(translation)
+                                .font(.caption)
+                                .italic()
+                                .lineLimit(2)
+                        }
                     }
                 }
             } else {
                 if let definitions = word.definitions {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(definitions.prefix(3), id: \.number) { def in
+                        // Enumerate so we can provide a stable id and fallback number when .number is nil
+                        ForEach(Array(definitions.prefix(3).enumerated()), id: \.offset) { pair in
+                            let index = pair.offset
+                            let def = pair.element
+                            let number = def.number ?? (index + 1)
                             HStack(alignment: .top, spacing: 8) {
-                                Text("\(def.number).")
+                                Text("\(number).")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 Text(def.text)

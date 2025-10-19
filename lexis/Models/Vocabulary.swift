@@ -1,6 +1,6 @@
 import Foundation
 
-struct VocabularyEntry: Identifiable, Codable, Equatable {
+struct VocabularyWord: Identifiable, Codable, Equatable {
     let id: String
     let word: String
     let partOfSpeech: String
@@ -16,10 +16,9 @@ struct VocabularyEntry: Identifiable, Codable, Equatable {
     let alternateScript: String?  // kanji, cyrillic, etc.
     let translation: String?  // Translation in user's native language
     let translationLanguageCode: String?  // Language code of the translation
-    let exampleSentences: [ExampleSentence]?
+    let exampleSentences: [ExampleSentence]? // in target language with optional romanization & translation
 
     let difficulty: Difficulty
-    let dateAdded: Date
 
     enum Difficulty: String, Codable {
         case easy, medium, hard
@@ -37,7 +36,7 @@ struct VocabularyEntry: Identifiable, Codable, Equatable {
     }
 
     init(
-        id: String = UUID().uuidString,
+        id: String,
         word: String,
         partOfSpeech: String,
         pronunciation: String? = nil,
@@ -49,8 +48,7 @@ struct VocabularyEntry: Identifiable, Codable, Equatable {
         translation: String? = nil,
         translationLanguageCode: String? = nil,
         exampleSentences: [ExampleSentence]? = nil,
-        difficulty: Difficulty = .medium,
-        dateAdded: Date = Date()
+        difficulty: Difficulty = .medium
     ) {
         self.id = id
         self.word = word
@@ -65,7 +63,6 @@ struct VocabularyEntry: Identifiable, Codable, Equatable {
         self.translationLanguageCode = translationLanguageCode
         self.exampleSentences = exampleSentences
         self.difficulty = difficulty
-        self.dateAdded = dateAdded
     }
 }
 
