@@ -117,8 +117,6 @@ struct SettingsView: View {
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                             isLearningNewLanguage.toggle()
-                            // Force vocabulary rotation when mode changes
-                            VocabularyStore.shared.forceRotation()
                         }
                     } label: {
                         HStack(spacing: 6) {

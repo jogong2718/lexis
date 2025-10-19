@@ -1,121 +1,34 @@
 import Combine
 import Foundation
 import WidgetKit
+import UIKit // added
 
 class VocabularyStore: ObservableObject {
     static let shared = VocabularyStore()
 
-    // Add App Group identifier
     private static let appGroupIdentifier = "group.com.jogong2718.lexis"
-    private let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier)
+    private let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier)!
 
-    // Remove @Published currentWord - make it computed from shared state
-    var currentWord: VocabularyWord? {
-        // Try to read shared index and map into our in-memory allVocabulary via the shared list's ids.
-        let baseIndex = sharedDefaults?.integer(forKey: "lexis.currentIndex") ?? 0
-
-        // If a shared JSON list exists, use it to map id -> allVocabulary.
-        // IMPORTANT: if the shared list decodes successfully but is empty, treat that as "no current word".
-        if let data = sharedDefaults?.data(forKey: "lexis.wordListJSON") {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            if let sharedList = try? decoder.decode([VocabularyWord].self, from: data) {
-                if sharedList.isEmpty {
-                    // Shared export intentionally empty (no candidates) — no current word.
-                    print("APP: shared word list decoded and is empty -> no current word")
-                    return nil
-                }
-                let safeIndex = (baseIndex % sharedList.count + sharedList.count) % sharedList.count
-                let id = sharedList[safeIndex].id
-                if let found = allVocabulary.first(where: { $0.id == id }) {
-                    return found
-                } else {
-                    // fallback to legacy behavior if id not found
-                    print("APP: shared id \(id) not found in allVocabulary; falling back to legacy index semantics")
-                }
-            } else {
-                // If decode failed, continue to fallback behavior below
-            }
-        }
-
-        // Fallback: legacy behavior — interpret baseIndex as index into allVocabulary
-        guard let legacyBaseIndex = sharedDefaults?.integer(forKey: "lexis.currentIndex") else {
-            return nil
-        }
-        guard !allVocabulary.isEmpty else { return nil }
-
-        let baseDate = sharedDefaults?.object(forKey: "lexis.lastRotationDate") as? Date ?? Date()
-        let rotationInterval = sharedDefaults?.double(forKey: "lexis.rotationInterval") ?? calculateRotationInterval()
-
-        let currentIndex = indexFor(
-            date: Date(),
-            baseIndex: legacyBaseIndex,
-            baseDate: baseDate,
-            rotationInterval: rotationInterval,
-            totalCount: allVocabulary.count
-        )
-
-        let safeIndex = (currentIndex % allVocabulary.count + allVocabulary.count) % allVocabulary.count
-        return allVocabulary[safeIndex]
-    }
-    
+    @Published var currentWord: VocabularyWord?
     @Published var history: [VocabularyWord] = []
 
     private var allVocabulary: [VocabularyWord] = []
-    private var vocabularyHistory: VocabularyHistory = VocabularyHistory()
-
-    private let vocabularyFileURL: URL
-    private let historyFileURL: URL
     private var cancellables = Set<AnyCancellable>()
 
+    // Snapshot to detect only meaningful settings changes
+    private var lastSettingsSnapshot: String = ""
+
     private init() {
-        // Setup file URLs using App Group
-        guard
-            let containerURL = FileManager.default.containerURL(
-                forSecurityApplicationGroupIdentifier: VocabularyStore.appGroupIdentifier
-            )
-        else {
-            // Fallback to documents directory if App Group not configured yet
-            let documentsPath = FileManager.default.urls(
-                for: .documentDirectory, in: .userDomainMask)[0]
-            vocabularyFileURL = documentsPath.appendingPathComponent("vocabulary.json")
-            historyFileURL = documentsPath.appendingPathComponent("history.json")
-
-            loadVocabulary()
-            loadHistory()
-
-            // Initialize shared state if needed
-            if sharedDefaults?.object(forKey: "lexis.currentIndex") == nil {
-                persistRotationState(currentIndex: 0, lastRotationDate: Date(), rotationInterval: calculateRotationInterval())
-            }
-
-            checkAndRotateIfNeeded()
-            observeLanguageModeChanges()
-            return
-        }
-
-        vocabularyFileURL = containerURL.appendingPathComponent("vocabulary.json")
-        historyFileURL = containerURL.appendingPathComponent("history.json")
-
         loadVocabulary()
-        loadHistory()
+        // capture initial snapshot so our own writes won't trigger handling
+        lastSettingsSnapshot = settingsSnapshot()
+        refreshFromSharedState()
+        observeSettingsChanges()
 
-        // Initialize shared state if needed
-        if sharedDefaults?.object(forKey: "lexis.currentIndex") == nil {
-            persistRotationState(currentIndex: 0, lastRotationDate: Date(), rotationInterval: calculateRotationInterval())
-        }
-
-        checkAndRotateIfNeeded()
-        observeLanguageModeChanges()
-    }
-
-    // MARK: - Observe Language Mode Changes
-
-    private func observeLanguageModeChanges() {
-        // Listen for changes to isLearningNewLanguage
-        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+        // Observe app lifecycle to refresh state when app becomes active / foregrounded.
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
-                self?.checkAndRotateIfNeeded()
+                self?.refreshFromSharedState()
             }
             .store(in: &cancellables)
     }
@@ -126,7 +39,6 @@ class VocabularyStore: ObservableObject {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        // Try to decode a Data blob into [VocabularyWord] using multiple strategies
         func decodeVocabulary(from data: Data) -> [VocabularyWord]? {
             if let vocabulary = try? decoder.decode([VocabularyWord].self, from: data) {
                 return vocabulary
@@ -134,197 +46,338 @@ class VocabularyStore: ObservableObject {
             if let wrapped = try? decoder.decode(VocabularyFile.self, from: data) {
                 return wrapped.entries
             }
-            if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-               let entriesArray = json["entries"] {
-                if let entriesData = try? JSONSerialization.data(withJSONObject: entriesArray, options: []) {
-                    if let vocabulary = try? decoder.decode([VocabularyWord].self, from: entriesData) {
-                        return vocabulary
-                    }
-                }
-            }
             return nil
         }
 
-        // 1) Try to load from container/app-group file first (existing behavior) — capture decoded array and count
-        print("Attempting to load vocabulary from app group container")
-        var appVocabulary: [VocabularyWord]? = nil
-        if let data = try? Data(contentsOf: vocabularyFileURL) {
-            appVocabulary = decodeVocabulary(from: data)
-            if appVocabulary == nil {
-                print("Failed to decode app-group vocabulary file")
-            } else {
-                print("Loaded \(appVocabulary!.count) entries from app-group file")
+        // Try App Group first
+        if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier) {
+            let fileURL = containerURL.appendingPathComponent("vocabulary.json")
+            if let data = try? Data(contentsOf: fileURL), let vocab = decodeVocabulary(from: data) {
+                allVocabulary = vocab
+                print("Loaded \(vocab.count) entries from app group")
+                return
             }
-        } else {
-            print("No app-group vocabulary file at \(vocabularyFileURL.path)")
         }
 
-        // 2) Try to load the bundled resource vocabulary.json
-        var bundleVocabulary: [VocabularyWord]? = nil
+        // Try bundled resources
         let bundleCandidates: [URL?] = [
             Bundle.main.url(forResource: "vocabulary", withExtension: "json"),
             Bundle.main.url(forResource: "Data/vocabulary", withExtension: "json")
         ]
 
         for candidate in bundleCandidates.compactMap({ $0 }) {
-            if let data = try? Data(contentsOf: candidate) {
-                if let vocabulary = decodeVocabulary(from: data) {
-                    bundleVocabulary = vocabulary
-                    print("Loaded \(bundleVocabulary!.count) entries from bundled vocabulary at \(candidate.path)")
-                    break
-                } else {
-                    print("Failed to decode bundled vocabulary at \(candidate.path)")
-                }
+            if let data = try? Data(contentsOf: candidate), let vocab = decodeVocabulary(from: data) {
+                allVocabulary = vocab
+                print("Loaded \(vocab.count) entries from bundle")
+                saveToAppGroup()
+                return
             }
         }
 
-        let appCount = appVocabulary?.count ?? 0
-        let bundleCount = bundleVocabulary?.count ?? 0
-
-        // 3) Decision: prefer bundle only when it has strictly more entries than app-group
-        if bundleCount > appCount {
-            print("Using bundled vocabulary (\(bundleCount)) because it has more entries than app-group (\(appCount))")
-            allVocabulary = bundleVocabulary ?? []
-            // Persist copy to app-group container so future launches use it
-            saveVocabulary()
-            return
-        }
-
-        // 4) Otherwise prefer app-group if available
-        if appCount > 0 {
-            print("Using app-group vocabulary with \(appCount) entries")
-            allVocabulary = appVocabulary ?? []
-            return
-        }
-
-        // 5) If no app-group but bundle exists, use bundle
-        if bundleCount > 0 {
-            print("App-group empty; using bundled vocabulary with \(bundleCount) entries")
-            allVocabulary = bundleVocabulary ?? []
-            saveVocabulary()
-            return
-        }
-
-        // 6) Final fallback: existing sample data (safety net)
-        print("No vocabulary found in app-group or bundle; falling back to sample data")
+        // Fallback to sample data
         allVocabulary = createSampleData()
-        saveVocabulary()
+        saveToAppGroup()
+    }
+
+    private func saveToAppGroup() {
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier) else { return }
+        let fileURL = containerURL.appendingPathComponent("vocabulary.json")
+        if let data = try? JSONEncoder().encode(allVocabulary) {
+            try? data.write(to: fileURL)
+        }
+    }
+
+    // MARK: - Observe Settings Changes
+
+    private func observeSettingsChanges() {
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                let snap = self.settingsSnapshot()
+                // only act when relevant user-facing settings changed
+                if snap != self.lastSettingsSnapshot {
+                    self.lastSettingsSnapshot = snap
+                    self.handleSettingsChange()
+                } else {
+                    // ignore changes caused by our own shared state writes
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    // Build a compact snapshot string of the user-configurable settings
+    private func settingsSnapshot() -> String {
+        let d = PreferencesStore.defaults
+        let parts: [String] = [
+            String(d.bool(forKey: PrefKey.isLearningNewLanguage)),
+            d.string(forKey: PrefKey.nativeLanguageCode) ?? "",
+            d.string(forKey: PrefKey.targetLanguageCode) ?? "",
+            String(d.bool(forKey: PrefKey.difficultyEasy)),
+            String(d.bool(forKey: PrefKey.difficultyMedium)),
+            String(d.bool(forKey: PrefKey.difficultyHard)),
+            String(d.integer(forKey: PrefKey.frequencyMin)),
+            String(d.integer(forKey: PrefKey.frequencyMax)),
+            String(d.integer(forKey: PrefKey.startHour)),
+            String(d.integer(forKey: PrefKey.startMinute)),
+            String(d.bool(forKey: PrefKey.startIsPM)),
+            String(d.integer(forKey: PrefKey.endHour)),
+            String(d.integer(forKey: PrefKey.endMinute)),
+            String(d.bool(forKey: PrefKey.endIsPM))
+        ]
+        return parts.joined(separator: "|")
+    }
+
+    private func handleSettingsChange() {
+        regenerateWordList()
+        forceRotation()
+    }
+
+    // MARK: - Deterministic Word Selection
+
+    func refreshFromSharedState() {
+        let wordList = loadSharedWordList()
+        guard !wordList.isEmpty else {
+            currentWord = nil
+            return
+        }
+
+        let baseIndex = sharedDefaults.integer(forKey: PrefKey.currentIndex)
+        let baseDate = sharedDefaults.object(forKey: PrefKey.lastRotationDate) as? Date ?? Date()
+        let rotationInterval = sharedDefaults.double(forKey: PrefKey.rotationInterval)
+
+        let currentIndex = calculateCurrentIndex(baseIndex: baseIndex, baseDate: baseDate, rotationInterval: rotationInterval, totalCount: wordList.count)
+        currentWord = wordList[safe: currentIndex]
+
+        loadHistory()
+    }
+
+    private func calculateCurrentIndex(baseIndex: Int, baseDate: Date, rotationInterval: TimeInterval, totalCount: Int) -> Int {
+        guard rotationInterval > 0, totalCount > 0 else { return 0 }
+        
+        let now = Date()
+        if !isInActiveWindow(now) { return baseIndex }
+        
+        let elapsed = now.timeIntervalSince(baseDate)
+        let steps = Int(floor(elapsed / rotationInterval))
+        return (baseIndex + steps) % totalCount
+    }
+
+    private func loadSharedWordList() -> [VocabularyWord] {
+        guard let data = sharedDefaults.data(forKey: PrefKey.wordListJSON) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([VocabularyWord].self, from: data)) ?? []
     }
 
     private func loadHistory() {
-        if let data = try? Data(contentsOf: historyFileURL),
-            let loadedHistory = try? JSONDecoder().decode(VocabularyHistory.self, from: data)
-        {
-            vocabularyHistory = loadedHistory
+        guard let data = sharedDefaults.data(forKey: PrefKey.historyJSON) else {
+            history = []
+            return
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        history = (try? decoder.decode([VocabularyWord].self, from: data)) ?? []
+    }
 
-            // Populate history array
-            history = vocabularyHistory.entries.compactMap { id in
-                allVocabulary.first { $0.id == id }
+    // MARK: - Word Rotation
+
+    func checkAndRotateIfNeeded() {
+        let now = Date()
+        print("DEBUG: Checking rotation at \(now)")
+        guard isInActiveWindow(now) else {
+            print("DEBUG: Not in active window")
+            return
+        }
+
+        // Obtain timeRemaining first so we can log it safely (guard binding in else block can't access it).
+        let timeRemaining = getTimeUntilNextRotation()
+        if let remaining = timeRemaining {
+            if remaining < 1 {
+                print("DEBUG: Time to rotate word! (remaining: \(remaining))")
+                rotateWord()
+            } else {
+                print("DEBUG: Time remaining: \(remaining)")
             }
+        } else {
+            print("DEBUG: getTimeUntilNextRotation returned nil")
         }
     }
-
-    // MARK: - Saving
-
-    private func saveVocabulary() {
-        if let data = try? JSONEncoder().encode(allVocabulary) {
-            try? data.write(to: vocabularyFileURL)
-        }
-    }
-
-    private func saveHistory() {
-        if let data = try? JSONEncoder().encode(vocabularyHistory) {
-            try? data.write(to: historyFileURL)
-        }
-    }
-
-    // MARK: - Public Methods
 
     func forceRotation() {
         rotateWord()
     }
 
-    func getLastRotation() -> Date {
-        return vocabularyHistory.lastRotation
+    private func rotateWord() {
+        print("DEBUG: Rotating word...")
+        let wordList = generateFilteredWordList()
+        print("DEBUG: Generated word list with \(wordList.count) entries")
+        guard !wordList.isEmpty else { 
+            print("DEBUG: No words available for rotation")
+            return
+        }
+        let currentIndex = sharedDefaults.integer(forKey: PrefKey.currentIndex)
+        let nextIndex = (currentIndex + 1) % wordList.count
+        let nextWord = wordList[nextIndex]
+
+        print("DEBUG: Next word is \(nextWord.word) (index \(nextIndex))")
+        print("DEBUG: Current word is \(currentWord?.word) (index \(currentIndex))")
+        print("DEBUG: Rotating from \(currentWord?.word) to \(nextWord.word)")
+
+        addToHistory(nextWord)
+        updateSharedState(index: nextIndex, word: nextWord, wordList: wordList)
+
+        print("DEBUG: Rotation complete. New current word is \(nextWord.word)")
+        
+        currentWord = nextWord
+        
+        WidgetCenter.shared.reloadAllTimelines()
+        NotificationCenter.default.post(name: NSNotification.Name("VocabularyWordChanged"), object: nil)
+
+        print("DEBUG: Posted VocabularyWordChanged notification")
     }
 
-    func getTimeUntilNextRotation() -> TimeInterval? {
-        let frequencyMin = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMin)
-        let frequencyMax = PreferencesStore.defaults.integer(forKey: PrefKey.frequencyMax)
+    private func regenerateWordList() {
+        let wordList = generateFilteredWordList()
+        let rotationInterval = calculateRotationInterval()
+        
+        guard !wordList.isEmpty else { return }
+        
+        let currentWord = wordList.first!
+        addToHistory(currentWord)
+        updateSharedState(index: 0, word: currentWord, wordList: wordList)
+        
+        self.currentWord = currentWord
+    }
+
+    private func updateSharedState(index: Int, word: VocabularyWord, wordList: [VocabularyWord]) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        
+        sharedDefaults.set(index, forKey: PrefKey.currentIndex)
+        sharedDefaults.set(Date(), forKey: PrefKey.lastRotationDate)
+        sharedDefaults.set(calculateRotationInterval(), forKey: PrefKey.rotationInterval)
+        sharedDefaults.set(word.id, forKey: PrefKey.currentWordId)
+        
+        if let wordListData = try? encoder.encode(wordList) {
+            sharedDefaults.set(wordListData, forKey: PrefKey.wordListJSON)
+        }
+        
+        saveTimeWindowSettings()
+        sharedDefaults.synchronize()
+    }
+
+    private func saveTimeWindowSettings() {
+        let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
+        let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
+        let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
+        let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
+        let isLearningNew = PreferencesStore.defaults.bool(forKey: PrefKey.isLearningNewLanguage)
+        
+        sharedDefaults.set(startHour, forKey: "lexis.startHour")
+        sharedDefaults.set(endHour, forKey: "lexis.endHour")
+        sharedDefaults.set(startIsPM, forKey: "lexis.startIsPM")
+        sharedDefaults.set(endIsPM, forKey: "lexis.endIsPM")
+        sharedDefaults.set(isLearningNew, forKey: "lexis.isLearningNew")
+    }
+
+    private func addToHistory(_ word: VocabularyWord) {
+        history.append(word)
+        if history.count > 20 {
+            history.removeFirst()
+        }
+        
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(history) {
+            sharedDefaults.set(data, forKey: PrefKey.historyJSON)
+        }
+    }
+
+    private func generateFilteredWordList() -> [VocabularyWord] {
+        let difficultyEasy = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyEasy)
+        let difficultyMedium = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyMedium)
+        let difficultyHard = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyHard)
+        let isLearningNew = PreferencesStore.defaults.bool(forKey: PrefKey.isLearningNewLanguage)
+        let languageCode = isLearningNew 
+            ? (PreferencesStore.defaults.string(forKey: PrefKey.targetLanguageCode) ?? "")
+            : (PreferencesStore.defaults.string(forKey: PrefKey.nativeLanguageCode) ?? "")
+
+        var filtered = allVocabulary.filter { word in
+            word.languageCode == languageCode &&
+            ((word.difficulty == .easy && difficultyEasy) ||
+             (word.difficulty == .medium && difficultyMedium) ||
+             (word.difficulty == .hard && difficultyHard))
+        }
+
+        let recentIds = Set(history.suffix(2).map { $0.id })
+        filtered = filtered.filter { !recentIds.contains($0.id) }
+
+        return filtered
+    }
+
+    // MARK: - Time Window Logic
+
+    private func isInActiveWindow(_ date: Date) -> Bool {
         let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
         let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
         let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
         let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
 
-        guard frequencyMin > 0 && frequencyMax > 0 else {
-            return nil
-        }
-
-        let rotationInterval = calculateRotationInterval()
-        guard rotationInterval > 0, rotationInterval.isFinite else {
-            return nil
-        }
-
         let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
         let end24 = convertTo24Hour(hour: endHour, isPM: endIsPM)
-        
-        let calendar = Calendar.current
-        let now = Date()
-        let currentHour = calendar.component(.hour, from: now)
-        let currentMinute = calendar.component(.minute, from: now)
-        
-        // Check if we're in the active window
-        let isInTimeWindow: Bool
+
+        let currentHour = Calendar.current.component(.hour, from: date)
+
         if start24 <= end24 {
-            isInTimeWindow = currentHour >= start24 && currentHour < end24
+            return currentHour >= start24 && currentHour < end24
         } else {
-            isInTimeWindow = currentHour >= start24 || currentHour < end24
+            return currentHour >= start24 || currentHour < end24
         }
-        
-        // If outside window, calculate time until window starts
-        if !isInTimeWindow {
-            let startOfTomorrow = calendar.startOfDay(for: now.addingTimeInterval(86400))
-            let nextWindowStart: Date
-            
-            if currentHour < start24 {
-                // Window starts later today
-                var components = calendar.dateComponents([.year, .month, .day], from: now)
-                components.hour = start24
-                components.minute = 0
-                nextWindowStart = calendar.date(from: components) ?? now
-            } else {
-                // Window starts tomorrow
-                var components = calendar.dateComponents([.year, .month, .day], from: startOfTomorrow)
-                components.hour = start24
-                components.minute = 0
-                nextWindowStart = calendar.date(from: components) ?? now
-            }
-            
-            return nextWindowStart.timeIntervalSince(now)
+    }
+
+    func getTimeUntilNextRotation() -> TimeInterval? {
+        let rotationInterval = calculateRotationInterval()
+        guard rotationInterval > 0 else { return nil }
+
+        let now = Date()
+        guard isInActiveWindow(now) else {
+            return timeUntilWindowStart()
         }
+
+        let baseDate = sharedDefaults.object(forKey: PrefKey.lastRotationDate) as? Date ?? now
+        let elapsed = now.timeIntervalSince(baseDate)
+        let timeToNext = rotationInterval - elapsed.truncatingRemainder(dividingBy: rotationInterval)
         
-        // We're in the window - calculate based on today's window start
-        var windowStartComponents = calendar.dateComponents([.year, .month, .day], from: now)
-        windowStartComponents.hour = start24
-        windowStartComponents.minute = 0
-        windowStartComponents.second = 0
-        
-        guard let todayWindowStart = calendar.date(from: windowStartComponents) else {
-            return nil
+        return max(0, timeToNext)
+    }
+
+    private func timeUntilWindowStart() -> TimeInterval {
+        let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
+        let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
+        let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
+
+        let now = Date()
+        let calendar = Calendar.current
+        let currentHour = calendar.component(.hour, from: now)
+
+        var components = calendar.dateComponents([.year, .month, .day], from: now)
+        components.hour = start24
+        components.minute = 0
+        components.second = 0
+
+        if currentHour < start24 {
+            let nextStart = calendar.date(from: components) ?? now
+            return nextStart.timeIntervalSince(now)
+        } else {
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
+            components = calendar.dateComponents([.year, .month, .day], from: tomorrow)
+            components.hour = start24
+            components.minute = 0
+            components.second = 0
+            let nextStart = calendar.date(from: components) ?? now
+            return nextStart.timeIntervalSince(now)
         }
-        
-        // Calculate how much time has passed since window started
-        let timeSinceWindowStart = now.timeIntervalSince(todayWindowStart)
-        
-        // Calculate which rotation we're on
-        let rotationsSinceWindowStart = floor(timeSinceWindowStart / rotationInterval)
-        
-        // Calculate when the next rotation should occur
-        let nextRotationTime = todayWindowStart.addingTimeInterval((rotationsSinceWindowStart + 1) * rotationInterval)
-        
-        let timeRemaining = nextRotationTime.timeIntervalSince(now)
-        
-        return max(0, timeRemaining)
     }
 
     func calculateRotationInterval() -> TimeInterval {
@@ -335,295 +388,21 @@ class VocabularyStore: ObservableObject {
         let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
         let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
 
-        // Validate frequency values
-        guard frequencyMin > 0 && frequencyMax > 0 && frequencyMin <= frequencyMax else {
-            return 3600.0
-        }
+        guard frequencyMin > 0, frequencyMax > 0, frequencyMin <= frequencyMax else { return 3600.0 }
 
         let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
         let end24 = convertTo24Hour(hour: endHour, isPM: endIsPM)
 
-        // Calculate hours in the active window
-        let activeHours: Double
-        if start24 <= end24 {
-            activeHours = Double(end24 - start24)
-        } else {
-            // Crosses midnight
-            activeHours = Double(24 - start24 + end24)
-        }
-
-        guard activeHours > 0 else {
-            return 3600.0
-        }
+        let activeHours = Double(start24 <= end24 ? (end24 - start24) : (24 - start24 + end24))
+        guard activeHours > 0 else { return 3600.0 }
 
         let avgFrequency = Double(frequencyMin + frequencyMax) / 2.0
-        
-        let interval = (activeHours * 3600.0) / avgFrequency
-        
-        return interval
-    }
-    // MARK: - Rotation Logic
-
-    func checkAndRotateIfNeeded() {
-        let lastRotation = vocabularyHistory.lastRotation
-        let now = Date()
-
-        // Get user preferences
-        let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
-        let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
-        let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
-        let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
-
-        // Convert to 24-hour format
-        let start24 = convertTo24Hour(hour: startHour, isPM: startIsPM)
-        let end24 = convertTo24Hour(hour: endHour, isPM: endIsPM)
-
-        // Check if we're in the allowed time window
-        let calendar = Calendar.current
-        let currentHour = calendar.component(.hour, from: now)
-
-        let isInTimeWindow: Bool
-        if start24 <= end24 {
-            isInTimeWindow = currentHour >= start24 && currentHour < end24
-        } else {
-            isInTimeWindow = currentHour >= start24 || currentHour < end24
-        }
-
-        guard isInTimeWindow else {
-            print("DEBUG checkAndRotateIfNeeded: Outside time window")
-            if sharedDefaults?.object(forKey: "lexis.currentIndex") == nil {
-                // Show a word even outside the window on first load
-                rotateWord()
-            }
-            return
-        }
-
-        // Calculate today's window start
-        var windowStartComponents = calendar.dateComponents([.year, .month, .day], from: now)
-        windowStartComponents.hour = start24
-        windowStartComponents.minute = 0
-        windowStartComponents.second = 0
-        
-        guard let todayWindowStart = calendar.date(from: windowStartComponents) else {
-            return
-        }
-
-        let rotationInterval = calculateRotationInterval()
-        guard rotationInterval > 0, rotationInterval.isFinite else {
-            return
-        }
-
-        // Calculate time since today's window started
-        let timeSinceWindowStart = now.timeIntervalSince(todayWindowStart)
-        
-        // Calculate which rotation number we should be on
-        let expectedRotationNumber = Int(floor(timeSinceWindowStart / rotationInterval))
-        
-        // Calculate time since last rotation
-        let timeSinceLastRotation = now.timeIntervalSince(lastRotation)
-        
-        print("DEBUG checkAndRotateIfNeeded:")
-        print("  - Current time: \(now)")
-        print("  - Window start: \(todayWindowStart)")
-        print("  - Time since window start: \(timeSinceWindowStart)s")
-        print("  - Expected rotation #: \(expectedRotationNumber)")
-        print("  - Last rotation: \(lastRotation)")
-        print("  - Time since last rotation: \(timeSinceLastRotation)s")
-        print("  - Rotation interval: \(rotationInterval)s")
-
-        // Rotate if enough time has passed OR if no word is set yet
-        if timeSinceLastRotation >= rotationInterval - 1 || sharedDefaults?.object(forKey: "lexis.currentIndex") == nil {
-            print("DEBUG: Rotating word now")
-            rotateWord()
-        } else {
-            print("DEBUG: Not time to rotate yet")
-        }
+        return (activeHours * 3600.0) / avgFrequency
     }
 
     private func convertTo24Hour(hour: Int, isPM: Bool) -> Int {
-        if hour == 12 {
-            return isPM ? 12 : 0
-        }
+        if hour == 12 { return isPM ? 12 : 0 }
         return isPM ? hour + 12 : hour
-    }
-
-    private func rotateWord() {
-        // Use the shared candidate list (language/difficulty/recent-history filtered)
-        var candidates = sharedCandidateList()
-
-        // Fallback: if sharedCandidateList returns empty, reproduce legacy filtering to avoid having no candidates
-        if candidates.isEmpty {
-            // Get difficulty preferences
-            let difficultyEasy = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyEasy)
-            let difficultyMedium = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyMedium)
-            let difficultyHard = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyHard)
-
-            // Filter by language
-            let isLearningNew = PreferencesStore.defaults.bool(forKey: PrefKey.isLearningNewLanguage)
-            let targetCode = PreferencesStore.defaults.string(forKey: PrefKey.targetLanguageCode) ?? ""
-            let nativeCode = PreferencesStore.defaults.string(forKey: PrefKey.nativeLanguageCode) ?? ""
-
-            let languageCode = isLearningNew ? targetCode : nativeCode
-
-            candidates = allVocabulary.filter { entry in
-                entry.languageCode == languageCode
-                    && ((entry.difficulty == .easy && difficultyEasy)
-                        || (entry.difficulty == .medium && difficultyMedium)
-                        || (entry.difficulty == .hard && difficultyHard))
-            }
-
-            // Remove recently shown words
-            let recentIds = Set(vocabularyHistory.entries.suffix(2))
-            candidates = candidates.filter { !recentIds.contains($0.id) }
-        }
-
-        // Pick random word if any candidates exist
-        if let newWord = candidates.randomElement() {
-            addToHistory(newWord)
-            vocabularyHistory.lastRotation = Date()
-            saveHistory()
-
-            if let indexInAll = allVocabulary.firstIndex(where: { $0.id == newWord.id }) {
-                let rotationInterval = calculateRotationInterval()
-                persistRotationState(currentIndex: indexInAll, lastRotationDate: vocabularyHistory.lastRotation, rotationInterval: rotationInterval)
-            }
-
-            // Trigger UI update by posting notification
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: NSNotification.Name("VocabularyWordChanged"), object: nil)
-            }
-
-            // Force widget reload
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                WidgetCenter.shared.reloadAllTimelines()
-            }
-        } else {
-            print("DEBUG: rotateWord: no candidates available to choose from")
-        }
-    }
-
-    // MARK: - History Management
-
-    private func addToHistory(_ entry: VocabularyWord) {
-        vocabularyHistory.entries.append(entry.id)
-
-        // Keep last 20 entries
-        if vocabularyHistory.entries.count > 20 {
-            vocabularyHistory.entries.removeFirst(vocabularyHistory.entries.count - 20)
-        }
-
-        // Update published history
-        history = vocabularyHistory.entries.compactMap { id in
-            allVocabulary.first { $0.id == id }
-        }
-    }
-
-    func getEntry(byId id: String) -> VocabularyWord? {
-        allVocabulary.first { $0.id == id }
-    }
-
-    // MARK: - Shared State Management
-
-    private func persistRotationState(currentIndex: Int, lastRotationDate: Date, rotationInterval: TimeInterval) {
-        // Debug: print values being persisted
-        print("APP: persistRotationState -> currentIndex(inAll)=\(currentIndex), lastRotationDate=\(lastRotationDate), rotationInterval=\(rotationInterval)")
-
-        // Build the filtered shared list (language/difficulty + recent-history filtered) to export to the widget.
-        let sharedList = sharedCandidateList()
-        // Find index of the chosen word within the shared list (0 when not found / sharedList empty)
-        let chosenId = allVocabulary.indices.contains(currentIndex) ? allVocabulary[currentIndex].id : ""
-        let indexInShared = sharedList.firstIndex(where: { $0.id == chosenId }) ?? 0
-
-        // Persist index relative to shared list (indexInShared may be 0 even when sharedList is empty)
-        sharedDefaults?.set(indexInShared, forKey: "lexis.currentIndex")
-        sharedDefaults?.set(lastRotationDate, forKey: "lexis.lastRotationDate")
-        sharedDefaults?.set(rotationInterval, forKey: "lexis.rotationInterval")
-
-        let isLearningNew = PreferencesStore.defaults.bool(forKey: PrefKey.isLearningNewLanguage)
-        sharedDefaults?.set(isLearningNew, forKey: "lexis.isLearningNew")
-
-        // Export time-window settings for the widget to respect
-        let startHour = PreferencesStore.defaults.integer(forKey: PrefKey.startHour)
-        let endHour = PreferencesStore.defaults.integer(forKey: PrefKey.endHour)
-        let startIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.startIsPM)
-        let endIsPM = PreferencesStore.defaults.bool(forKey: PrefKey.endIsPM)
-        sharedDefaults?.set(startHour, forKey: "lexis.startHour")
-        sharedDefaults?.set(endHour, forKey: "lexis.endHour")
-        sharedDefaults?.set(startIsPM, forKey: "lexis.startIsPM")
-        sharedDefaults?.set(endIsPM, forKey: "lexis.endIsPM")
-
-        // Export the filtered list for the widget to read — IMPORTANT: always write the filtered list (may be empty)
-        saveSharedWordListJSON(sharedList: sharedList)
-
-        // Debug: list keys after writing
-        if let idx = sharedDefaults?.object(forKey: "lexis.currentIndex") {
-            print("APP: shared lexis.currentIndex now = \(idx)")
-        }
-        if let date = sharedDefaults?.object(forKey: "lexis.lastRotationDate") as? Date {
-            print("APP: shared lexis.lastRotationDate now = \(date)")
-        }
-        if let interval = sharedDefaults?.object(forKey: "lexis.rotationInterval") as? Double {
-            print("APP: shared lexis.rotationInterval now = \(interval)")
-        }
-        if let learning = sharedDefaults?.object(forKey: "lexis.isLearningNew") {
-            print("APP: shared lexis.isLearningNew now = \(learning)")
-        }
-
-        sharedDefaults?.synchronize()
-        WidgetCenter.shared.reloadAllTimelines()
-    }
-
-    private func saveSharedWordListJSON(sharedList: [VocabularyWord]?) {
-        // Always write the filtered list. If sharedList == nil -> write empty array.
-        let listToWrite = sharedList ?? []
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        if let data = try? encoder.encode(listToWrite) {
-            sharedDefaults?.set(data, forKey: "lexis.wordListJSON")
-            print("APP: wrote lexis.wordListJSON bytes: \(data.count) (exporting \(listToWrite.count) entries)")
-            if let preview = String(data: data.prefix(2048), encoding: .utf8) {
-                print("APP: lexis.wordListJSON preview: \(preview.prefix(500))")
-            }
-        } else {
-            // If encoding fails for some reason, explicitly write an empty JSON array to avoid exporting the full app list.
-            let emptyData = Data("[]".utf8)
-            sharedDefaults?.set(emptyData, forKey: "lexis.wordListJSON")
-            print("APP: failed to encode shared list; wrote empty JSON array instead")
-        }
-    }
-
-    // Build the same candidate list used when rotating a word (language + difficulty + recent history)
-    private func sharedCandidateList() -> [VocabularyWord] {
-        let difficultyEasy = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyEasy)
-        let difficultyMedium = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyMedium)
-        let difficultyHard = PreferencesStore.defaults.bool(forKey: PrefKey.difficultyHard)
-
-        let isLearningNew = PreferencesStore.defaults.bool(forKey: PrefKey.isLearningNewLanguage)
-        let targetCode = PreferencesStore.defaults.string(forKey: PrefKey.targetLanguageCode) ?? ""
-        let nativeCode = PreferencesStore.defaults.string(forKey: PrefKey.nativeLanguageCode) ?? ""
-        let languageCode = isLearningNew ? targetCode : nativeCode
-
-        var candidates = allVocabulary.filter { entry in
-            entry.languageCode == languageCode
-                && ((entry.difficulty == .easy && difficultyEasy)
-                    || (entry.difficulty == .medium && difficultyMedium)
-                    || (entry.difficulty == .hard && difficultyHard))
-        }
-
-        // Remove recently shown words to match rotateWord behavior
-        let recentIds = Set(vocabularyHistory.entries.suffix(2))
-        candidates = candidates.filter { !recentIds.contains($0.id) }
-
-        return candidates
-    }
-
-    // compute index for any date using base state
-    private func indexFor(date: Date = .now, baseIndex: Int, baseDate: Date, rotationInterval: TimeInterval, totalCount: Int) -> Int {
-        guard rotationInterval > 0, totalCount > 0 else { return baseIndex % max(1, totalCount) }
-        let elapsed = date.timeIntervalSince(baseDate)
-        let steps = Int(floor(elapsed / rotationInterval))
-        return (baseIndex + steps) % totalCount
     }
 
     // MARK: - Sample Data
@@ -816,8 +595,13 @@ class VocabularyStore: ObservableObject {
         ]
     }
 
-    // small wrapper matching the top-level shape of Resources/Data/vocabulary.json
     private struct VocabularyFile: Codable {
         let entries: [VocabularyWord]
+    }
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

@@ -24,10 +24,8 @@ struct Provider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<VocabularyEntry>) -> Void) {
-        print("WIDGET: Generating timeline for VocabularyWidget")
         let now = Date()
         
-        // Read time-window settings from shared defaults
         let startHour = sharedDefaults?.integer(forKey: "lexis.startHour") ?? 8
         let endHour = sharedDefaults?.integer(forKey: "lexis.endHour") ?? 10
         let startIsPM = sharedDefaults?.bool(forKey: "lexis.startIsPM") ?? false
@@ -39,66 +37,48 @@ struct Provider: TimelineProvider {
         let calendar = Calendar.current
         let currentHour = calendar.component(.hour, from: now)
         
-        let isInTimeWindow: Bool
-        if start24 <= end24 {
-            isInTimeWindow = currentHour >= start24 && currentHour < end24
-        } else {
-            isInTimeWindow = currentHour >= start24 || currentHour < end24
-        }
+        let isInTimeWindow = start24 <= end24 
+            ? (currentHour >= start24 && currentHour < end24)
+            : (currentHour >= start24 || currentHour < end24)
         
-        // If outside the active window, create an entry showing time until window starts
         if !isInTimeWindow {
             let nextWindowStart = calculateNextWindowStart(now: now, start24: start24, calendar: calendar)
             let timeUntilStart = nextWindowStart.timeIntervalSince(now)
             let isLearning = sharedDefaults?.bool(forKey: "lexis.isLearningNew") ?? true
             let entry = VocabularyEntry(date: now, word: nil, isLearningNew: isLearning, timeUntilWindowStart: timeUntilStart)
             
-            // Refresh every minute to update the countdown
             let nextRefresh = now.addingTimeInterval(60)
             let timeline = Timeline(entries: [entry], policy: .after(nextRefresh))
             completion(timeline)
             return
         }
         
-        // Inside active window — proceed with normal word rotation logic
-        let baseIndex = sharedDefaults?.integer(forKey: "lexis.currentIndex") ?? 0
-        let baseDate = sharedDefaults?.object(forKey: "lexis.lastRotationDate") as? Date ?? now
-        let rotationInterval = sharedDefaults?.double(forKey: "lexis.rotationInterval") ?? 3600
-
-        print("WIDGET: shared lexes.currentIndex = \(baseIndex)")
-        print("WIDGET: shared lexis.lastRotationDate = \(String(describing: sharedDefaults?.object(forKey: "lexis.lastRotationDate"))) (interpreted: \(baseDate))")
-        print("WIDGET: shared lexis.rotationInterval = \(rotationInterval)")
-
         let wordList = loadWordList() ?? []
-
         guard !wordList.isEmpty else {
             let entry = VocabularyEntry(date: now, word: nil, isLearningNew: sharedDefaults?.bool(forKey: "lexis.isLearningNew") ?? true, timeUntilWindowStart: nil)
             completion(Timeline(entries: [entry], policy: .after(now.addingTimeInterval(300))))
             return
         }
 
-        // Calculate current index based on elapsed time
+        let baseIndex = sharedDefaults?.integer(forKey: PrefKey.currentIndex) ?? 0
+        let baseDate = sharedDefaults?.object(forKey: PrefKey.lastRotationDate) as? Date ?? now
+        let rotationInterval = sharedDefaults?.double(forKey: PrefKey.rotationInterval) ?? 3600
+
         let elapsed = now.timeIntervalSince(baseDate)
-        let stepsSinceBase = Int(floor(elapsed / rotationInterval))
-        let currentIndex = (baseIndex + stepsSinceBase) % wordList.count
+        let currentIndex = (baseIndex + Int(floor(elapsed / rotationInterval))) % wordList.count
         
-        // Calculate when the NEXT rotation should happen
-        let timeToNextRotation = rotationInterval - (elapsed.truncatingRemainder(dividingBy: rotationInterval))
-        let nextRotationDate = now.addingTimeInterval(timeToNextRotation)
+        let timeToNext = rotationInterval - elapsed.truncatingRemainder(dividingBy: rotationInterval)
+        let nextRotationDate = now.addingTimeInterval(timeToNext)
         
-        // Current word entry
-        let currentWord = loadWordForIndex(currentIndex, from: wordList)
+        let currentWord = wordList[safe: currentIndex]
         let isLearning = sharedDefaults?.bool(forKey: "lexis.isLearningNew") ?? true
         let currentEntry = VocabularyEntry(date: now, word: currentWord, isLearningNew: isLearning, timeUntilWindowStart: nil)
         
-        // Next word entry (for preloading)
         let nextIndex = (currentIndex + 1) % wordList.count
-        let nextWord = loadWordForIndex(nextIndex, from: wordList)
+        let nextWord = wordList[safe: nextIndex]
         let nextEntry = VocabularyEntry(date: nextRotationDate, word: nextWord, isLearningNew: isLearning, timeUntilWindowStart: nil)
         
-        // Refresh more frequently (every 5 minutes) to catch any state changes
         let refreshDate = min(nextRotationDate, now.addingTimeInterval(300))
-        
         let timeline = Timeline(entries: [currentEntry, nextEntry], policy: .after(refreshDate))
         completion(timeline)
     }
@@ -116,65 +96,11 @@ struct Provider: TimelineProvider {
         return VocabularyEntry(date: date, word: word, isLearningNew: isLearning, timeUntilWindowStart: nil)
     }
 
-    // Load decoded VocabularyWord list from App Group. Supports two formats:
-    // 1) JSON-encoded [VocabularyWord] under "lexis.wordListJSON"
-    // 2) Simple string array under "lexis.wordList" (backwards compatibility)
     private func loadWordList() -> [VocabularyWord]? {
-        // Try JSON first
-        if let data = sharedDefaults?.data(forKey: "lexis.wordListJSON") {
-            print("WIDGET: found lexis.wordListJSON bytes: \(data.count)")
-            // print truncated preview of JSON (safe)
-            if let preview = String(data: data.prefix(2048), encoding: .utf8) {
-                let previewTrimmed = preview.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("WIDGET: wordListJSON preview: \(previewTrimmed.prefix(500))")
-            }
-
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            do {
-                let decoded = try decoder.decode([VocabularyWord].self, from: data)
-                print("WIDGET: decoded wordListJSON -> \(decoded.count) entries")
-                return decoded
-            } catch let DecodingError.typeMismatch(type, ctx) {
-                print("WIDGET: typeMismatch \(type) at \(ctx.codingPath): \(ctx.debugDescription)")
-            } catch let DecodingError.valueNotFound(type, ctx) {
-                print("WIDGET: valueNotFound \(type) at \(ctx.codingPath): \(ctx.debugDescription)")
-            } catch let DecodingError.keyNotFound(key, ctx) {
-                print("WIDGET: keyNotFound \(key) at \(ctx.codingPath): \(ctx.debugDescription)")
-            } catch let DecodingError.dataCorrupted(ctx) {
-                print("WIDGET: dataCorrupted at \(ctx.codingPath): \(ctx.debugDescription)")
-            } catch {
-                print("WIDGET: decode error: \(error)")
-            }
-        } else {
-            print("WIDGET: no lexis.wordListJSON found in shared defaults")
-        }
-
-        // Fallback to simple string array
-        if let strings = sharedDefaults?.stringArray(forKey: "lexis.wordList"), !strings.isEmpty {
-            print("WIDGET: found lexis.wordList string array -> \(strings.count) words")
-            return strings.enumerated().map { idx, wordStr in
-                VocabularyWord(
-                    id: "w\(idx)",
-                    word: wordStr,
-                    partOfSpeech: "",
-                    pronunciation: nil,
-                    languageCode: "",
-                    definitions: nil,
-                    origin: nil,
-                    synonyms: nil,
-                    alternateScript: nil,
-                    translation: nil,
-                    translationLanguageCode: nil,
-                    exampleSentences: nil,
-                    difficulty: .medium
-                )
-            }
-        } else {
-            print("WIDGET: no lexis.wordList string array in shared defaults")
-        }
-
-        return nil
+        guard let data = sharedDefaults?.data(forKey: PrefKey.wordListJSON) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode([VocabularyWord].self, from: data)
     }
 
     private func loadWordForIndex(_ index: Int, from list: [VocabularyWord]) -> VocabularyWord? {
@@ -368,5 +294,11 @@ struct VocabularyWidget: Widget {
             .systemSmall, .systemMedium, .systemLarge,
             .accessoryCircular, .accessoryRectangular, .accessoryInline,
         ])
+    }
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

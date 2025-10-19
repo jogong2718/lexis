@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit // if not already imported elsewhere
 
 struct HomeView: View {
     @AppStorage(PrefKey.isLearningNewLanguage, store: PreferencesStore.defaults)
@@ -83,6 +84,11 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             // Refresh when settings change
+            refreshTrigger = UUID()
+        }
+        // Refresh when app becomes active — ensures view reads shared state that the widget computed from.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            vocabularyStore.refreshFromSharedState()
             refreshTrigger = UUID()
         }
         .navigationBarBackButtonHidden(true)
@@ -315,7 +321,9 @@ struct HomeView: View {
     private func startTimer() {
         updateTimeUntilNextWord()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            print("Timer fired")
             updateTimeUntilNextWord()
+            vocabularyStore.checkAndRotateIfNeeded()
         }
     }
 
@@ -324,11 +332,9 @@ struct HomeView: View {
             timeUntilNextWord = "Configure settings"
             return
         }
-        print("HOME: Time remaining until next word:", timeRemaining)
+        
         if timeRemaining < 1 {
-            print("HOME: Time for next word has arrived", timeRemaining)
             timeUntilNextWord = "Soon"
-            vocabularyStore.checkAndRotateIfNeeded()
         } else {
             timeUntilNextWord = formatTimeInterval(timeRemaining)
         }
@@ -355,3 +361,4 @@ struct HomeView: View {
         HomeView()
     }
 }
+
