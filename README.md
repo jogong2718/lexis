@@ -1,7 +1,48 @@
 # Lexis
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/44bbf973-590e-4956-ab23-18ad80dc4faa" width="300" autoplay loop muted playsinline></video>
-</p>
+A lightweight SwiftUI vocabulary learning app and widget. Lexis helps learners discover and review words in different languages using a compact, modern UI and an accompanying widget and Live Activity.
 
-coming to the app store soon...
+Video 1 — App walkthrough
+
+<video src="demos/demo1.mp4" controls width="720">Your browser does not support the video tag. You can download the video from demos/demo1.mp4.</video>
+
+Video 2 — Widget & Live Activity
+
+<video src="demos/demo2.mp4" controls width="720">Your browser does not support the video tag. You can download the video from demos/demo2.mp4.</video>
+
+## Features
+
+- SwiftUI app using a simple vocabulary store (JSON) in `Resources/Data/vocabulary.json`.
+- Widget and Live Activity bundles in `VocabularyWidget/` with a companion App Intent and persistence helpers.
+- Onboarding flow for choosing languages and difficulty.
+- Local persistence for preferences and vocabulary progress.
+
+## Project structure (important files)
+
+- `lexis/` — main app target
+  - `Models/` — data models (`Languages.swift`, `Vocabulary.swift`)
+  - `ViewModels/` and `Views/` — UI and view models
+  - `Resources/Data/vocabulary.json` — initial vocabulary data
+  - `Services/` — network and persistence helpers
+- `VocabularyWidget/` — widget target and Live Activity
+  - `VocabularyWord.swift`, `WidgetViews.swift`, `AppIntent.swift`
+
+## Requirements
+
+- macOS with Xcode 14+ (project targets iOS/tvOS/watchOS depending on your setup). Build and run using Xcode.
+- Swift 5.7+ (use the Swift toolchain provided by Xcode).
+
+## Running locally
+
+1. Open `lexis.xcodeproj` or `lexis.xcworkspace` in Xcode.
+2. Select the `lexis` scheme (or `VocabularyWidget` to run the widget target).
+3. Build and run on a simulator or device.
+
+Notes:
+
+- The widget and Live Activity targets require entitlements (see `lexis/lexis.entitlements` and `VocabularyWidget/` entitlements). Ensure you have the appropriate signing setup in Xcode.
+- If you add or update demo videos, place them in the repo's `demos/` folder and commit.
+
+## Contributing
+
+Contributions are welcome. Please open issues or PRs for bug reports and feature requests.
