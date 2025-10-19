@@ -2,13 +2,21 @@
 
 A lightweight SwiftUI vocabulary learning app and widget. Lexis helps learners discover and review words in different languages using a compact, modern UI and an accompanying widget and Live Activity.
 
-Video 1 — App walkthrough
+**Video 1 — Onboarding**
 
-<video src="demos/demo1.mp4" controls width="720">Your browser does not support the video tag. You can download the video from demos/demo1.mp4.</video>
+<iframe width="720" height="405" src="https://www.youtube.com/embed/He1UdsS6sss" 
+  title="Lexis App Walkthrough" frameborder="0" 
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+  allowfullscreen>
+</iframe>
 
-Video 2 — Widget & Live Activity
+**Video 2 — App walkthrough**
 
-<video src="demos/demo2.mp4" controls width="720">Your browser does not support the video tag. You can download the video from demos/demo2.mp4.</video>
+<iframe width="720" height="405" src="https://www.youtube.com/embed/HHwvt4r3vlA" 
+  title="Lexis App Walkthrough" frameborder="0" 
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+  allowfullscreen>
+</iframe>
 
 ## Features
 
