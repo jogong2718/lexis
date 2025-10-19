@@ -2,21 +2,12 @@
 
 A lightweight SwiftUI vocabulary learning app and widget. Lexis helps learners discover and review words in different languages using a compact, modern UI and an accompanying widget and Live Activity. Made so I can learn Japanese to prepare for my work term there!
 
-**Video 1 — Onboarding**
+**Video 1 — Onboarding**  
+[![Onboarding](https://img.youtube.com/vi/HHwvt4r3vlA/0.jpg)](https://www.youtube.com/watch?v=HHwvt4r3vlA)
 
-<iframe width="720" height="405" src="https://www.youtube.com/embed/He1UdsS6sss" 
-  title="Lexis App Walkthrough" frameborder="0" 
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-  allowfullscreen>
-</iframe>
+**Video 2 — App walkthrough**  
+[![App walkthrough](https://img.youtube.com/vi/He1UdsS6sss/0.jpg)](https://www.youtube.com/watch?v=He1UdsS6sss)
 
-**Video 2 — App walkthrough**
-
-<iframe width="720" height="405" src="https://www.youtube.com/embed/HHwvt4r3vlA" 
-  title="Lexis App Walkthrough" frameborder="0" 
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-  allowfullscreen>
-</iframe>
 
 ## Features
 
