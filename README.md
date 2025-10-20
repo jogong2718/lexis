@@ -8,7 +8,6 @@ A lightweight SwiftUI vocabulary learning app and widget. Lexis helps learners d
 **Video 2 — App walkthrough**  
 [![App walkthrough](https://img.youtube.com/vi/He1UdsS6sss/0.jpg)](https://www.youtube.com/watch?v=He1UdsS6sss)
 
-
 ## Features
 
 - SwiftUI app using a simple vocabulary store (JSON) in `Resources/Data/vocabulary.json`.
@@ -45,3 +44,7 @@ Notes:
 ## Contributing
 
 Contributions are welcome. Please open issues or PRs for bug reports and feature requests.
+
+## Extras
+
+Gna put this on the appstore if enough ppl like it and if I can afford the apple dev fee lol
